@@ -53,11 +53,20 @@ extern "C" void c2pstrcpy(Str255 dst, const char *src);	//#include <TextUtils.h>
 
 #define READ_LENGTH 4096
 
+// ONScripter-EN prints slot numbers and dates as ASCII; see useEnglishMenu().
+static void menuNumber( ScriptHandler &script_h, char *buffer, int no, int num_column, bool is_zero_inserted=false )
+{
+    if (coding2utf16->english_menu)
+        sprintf( buffer, is_zero_inserted ? "%0*d" : "%*d", num_column, no );
+    else
+        script_h.getStringFromInteger( buffer, no, num_column, is_zero_inserted );
+}
+
 void ONScripter::searchSaveFile( SaveFileInfo &save_file_info, int no )
 {
     char file_name[256];
 
-    script_h.getStringFromInteger( save_file_info.sjis_no, no, (num_save_file >= 10)?2:1 );
+    menuNumber( script_h, save_file_info.sjis_no, no, (num_save_file >= 10)?2:1 );
 #if defined(LINUX) || defined(MACOSX) || defined(IOS) || defined(ANDROID)
     sprintf( file_name, "%ssave%d.dat", save_dir?save_dir:archive_path, no );
     struct stat buf;
@@ -171,10 +180,10 @@ void ONScripter::searchSaveFile( SaveFileInfo &save_file_info, int no )
     save_file_info.minute = 0;
 #endif
     save_file_info.valid = true;
-    script_h.getStringFromInteger( save_file_info.sjis_month,  save_file_info.month,  2 );
-    script_h.getStringFromInteger( save_file_info.sjis_day,    save_file_info.day,    2 );
-    script_h.getStringFromInteger( save_file_info.sjis_hour,   save_file_info.hour,   2 );
-    script_h.getStringFromInteger( save_file_info.sjis_minute, save_file_info.minute, 2, true );
+    menuNumber( script_h, save_file_info.sjis_month,  save_file_info.month,  2 );
+    menuNumber( script_h, save_file_info.sjis_day,    save_file_info.day,    2 );
+    menuNumber( script_h, save_file_info.sjis_hour,   save_file_info.hour,   2 );
+    menuNumber( script_h, save_file_info.sjis_minute, save_file_info.minute, 2, true );
 }
 
 char *ONScripter::readSaveStrFromFile( int no )

@@ -26,6 +26,38 @@
 #include "coding2utf16.h"
 #include "Utils.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <string>
+// noberu: the text on screen, for its reading tools. Kept as the script wrote
+// it (Shift-JIS, GBK or UTF-8) and handed over at each click wait; the page
+// knows the encoding and decodes it.
+static std::string noberu_text;
+static void noberuTextAdd(const char *text)
+{
+    noberu_text += text[0];
+    if (text[1]) {
+        noberu_text += text[1];
+        if (text[2]) noberu_text += text[2];
+    }
+}
+static void noberuTextNewline()
+{
+    if (!noberu_text.empty() && noberu_text.back() != '\n') noberu_text += '\n';
+}
+static void noberuTextSend()
+{
+    if (noberu_text.empty()) return;
+    EM_ASM({ if (Module.noberuText) Module.noberuText(HEAPU8.slice($0, $0 + $1)); },
+           noberu_text.data(), (int)noberu_text.size());
+    noberu_text.clear();
+}
+#else
+static void noberuTextAdd(const char *) {}
+static void noberuTextNewline() {}
+static void noberuTextSend() {}
+#endif
+
 extern Coding2UTF16 *coding2utf16;
 
 #define IS_ROTATION_REQUIRED(x)	\
@@ -257,6 +289,7 @@ void ONScripter::drawChar( char* text, FontInfo *info, bool flush_flag, bool loo
         current_page->add( text[0] );
         if (text[1]) current_page->add( text[1] );
         if (text[2]) current_page->add( text[2] );
+        noberuTextAdd( text );
     }
 }
 
@@ -528,6 +561,7 @@ bool ONScripter::clickWait( char *out_text )
         else{ // called on '@'
             flush(refreshMode());
         }
+        noberuTextSend();
         num_chars_in_sentence = 0;
 
         event_mode = IDLE_EVENT_MODE;
@@ -538,6 +572,7 @@ bool ONScripter::clickWait( char *out_text )
             drawChar( out_text, &sentence_font, true, true, accumulation_surface, &text_info );
             num_chars_in_sentence++;
         }
+        noberuTextSend();
 
         while( (!(script_h.getEndStatus() & ScriptHandler::END_1BYTE_CHAR) &&
                 script_h.getStringBuffer()[ string_buffer_offset ] == ' ') ||
@@ -579,6 +614,7 @@ bool ONScripter::clickNewPage( char *out_text )
         drawChar( out_text, &sentence_font, true, true, accumulation_surface, &text_info );
         num_chars_in_sentence++;
     }
+    noberuTextSend();
 
     flush( REFRESH_NONE_MODE );
     skip_mode &= ~SKIP_TO_EOL;
@@ -681,7 +717,22 @@ void ONScripter::endRuby(bool flush_flag, bool lookback_flag, SDL_Surface *surfa
 
 int ONScripter::textCommand()
 {
-    if (line_enter_status <= 1 && (!pretextgosub_label || saveon_flag) && internal_saveon_flag){
+    // noberu: a line holding only !s/!d/!w waits is not text. Running pretextgosub
+    // on it clears saveon until the next click wait, so a save on the next page
+    // resumed at this line (The Letter: back to the title).
+    bool wait_only = false;
+    if (line_enter_status == 0 && !(script_h.getEndStatus() & ScriptHandler::END_1BYTE_CHAR)){
+        const char *p = script_h.getStringBuffer() + string_buffer_offset;
+        while (p[0] == '!' && (p[1] == 's' || p[1] == 'd' || p[1] == 'w')){
+            p += (p[1] == 's' && p[2] == 'd') ? 3 : 2;
+            while (*p >= '0' && *p <= '9') p++;
+            wait_only = true;
+        }
+        while (*p == ' ' || *p == '\t' || *p == 0x0a || *p == 0x0d) p++;
+        if (*p) wait_only = false;
+    }
+
+    if (!wait_only && line_enter_status <= 1 && (!pretextgosub_label || saveon_flag) && internal_saveon_flag){
         storeSaveFile();
         internal_saveon_flag = false;
     }
@@ -727,7 +778,7 @@ int ONScripter::textCommand()
     }
 
     char *current_script = script_h.getCurrent();
-    if (pretextgosub_label &&
+    if (pretextgosub_label && !wait_only &&
         (*(current_script-1) == 0x0a || *(current_script-1) == 0x0d) &&
         (!pagetag_flag || page_enter_status == 0) &&
         line_enter_status == 0){
@@ -751,7 +802,7 @@ int ONScripter::textCommand()
         return RET_CONTINUE;
     }
 
-    enterTextDisplayMode();
+    enterTextDisplayMode(!wait_only);
 
 #ifdef USE_LUA
     if (lua_handler.isCallbackEnabled(LUAHandler::LUA_TEXT))
@@ -814,6 +865,7 @@ void ONScripter::processEOT()
     if (!sentence_font.isLineEmpty() && !new_line_skip_flag){
         // if sentence_font.isLineEmpty() is true, newPage() might be already issued
         if (!sentence_font.isEndOfLine()) current_page->add( 0x0a );
+        noberuTextNewline();
         sentence_font.newLine();
     }
 
@@ -1031,7 +1083,25 @@ bool ONScripter::processText()
     }
     else{
         out_text[0] = ch;
-        
+
+        // noberu: English (1-byte) text wraps at spaces. Without this a word
+        // that reaches the window edge is cut in two (Moonshine). A space whose
+        // next word won't fit ends the line instead of being drawn.
+        if (ch == ' ' && (script_h.getEndStatus() & ScriptHandler::END_1BYTE_CHAR) &&
+            !sentence_font.isLineEmpty() && sentence_font.tateyoko_mode == FontInfo::YOKO_MODE){
+            const char *word = script_h.getStringBuffer() + string_buffer_offset + 1;
+            int len = 0;
+            while (word[len] && word[len] != ' ' && word[len] != '@' && word[len] != '\\' &&
+                   word[len] != '/' && word[len] != 0x0a) len++;
+            if (len > 0 && len < sentence_font.num_xy[0]*2 && sentence_font.isEndOfLine(len)){
+                noberuTextAdd(out_text);
+                current_page->add(0x0a);
+                sentence_font.newLine();
+                string_buffer_offset++;
+                return true;
+            }
+        }
+
         int matched_len = script_h.checkClickstr(script_h.getStringBuffer() + string_buffer_offset);
 
         if (matched_len > 0){

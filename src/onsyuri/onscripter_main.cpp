@@ -263,77 +263,31 @@ extern "C" void playVideoIOS(const char *filename, bool click_flag, bool loop_fl
 #undef fopen
 
 /*
-* fetch the file from server beforce fopen for lazyload
-* value: g_onsyuri_module, g_onsyuri_index, g_onsyuri_filemap
-* function: fetch_file
+* Lazy loading for the noberu-web host (onscripter-runtime/ons.html). The host
+* puts every game file into MEMFS as an empty placeholder, so the readers'
+* case-insensitive directory scan still finds it, and fills in the bytes the
+* first time the engine opens it for reading. Module.onsLazyPending(path) says
+* whether a path still needs filling; Module.onsLazyFetch(path) fills it.
+* ASYNCIFY lets the engine wait on the async file read.
 */
+EM_JS(int, ons_lazy_pending, (const char *path), {
+    return Module.onsLazyPending ? (Module.onsLazyPending(UTF8ToString(path)) ? 1 : 0) : 0;
+});
+
+EM_ASYNC_JS(int, ons_lazy_fetch, (const char *path), {
+    try {
+        await Module.onsLazyFetch(UTF8ToString(path));
+        return 1;
+    } catch (e) {
+        console.error("onsyuri: lazy load failed for", UTF8ToString(path), e);
+        return 0;
+    }
+});
+
 FILE *fopen_ons(const char *path, const char *mode)
 {
-    // printf("## fopen_ons %s, ", path);
-    static int use_lazyload = -1;
-    if(use_lazyload==-1)
-    {
-        use_lazyload = EM_ASM_INT(
-            // check enviroment
-            if (!g_onsyuri_module) return 0;
-            if (!g_onsyuri_index) return 0;
-            if (!fetch_file) return 0;
-
-            // check lazyload flag with filemap
-            if (!g_onsyuri_filemap) return 0;
-            if (Object.keys(g_onsyuri_filemap).length==0) return 0;
-            return 1;
-        );
-    }
-    
-    FILE *fp = fopen(path, mode);
-    if(!fp && use_lazyload==1 && (strcmp(mode, "r") || strcmp(mode, "rb")))
-    {   
-        int ret = 0;
-        ret = EM_ASM_INT( // path is combined after --gamedir
-            var path = g_onsyuri_module.UTF8ToString($0);
-            var key = path.toLowerCase(); // pay attention to the case sensitive of web
-            if(!g_onsyuri_filemap[key]) return 0;
-            if(g_onsyuri_filemap[key].loaded) return 2;
-            try {
-                fetch_file(g_onsyuri_module.FS, key, g_onsyuri_filemap);
-                return 1;
-            } 
-            catch(e) { 
-                console.log("## fopen_ons web lazyload ${path} error: ", e);
-                return 0;
-            }, path);
-        switch (ret)
-        {
-            case 0: 
-            {
-                // printf(" not found in g_onsyuri_filemap !\n");
-                return fp; // use fopen to check for other file mount
-                break;
-            }
-            case 1:
-            {
-                // printf(" waiting for fetch...\n");
-                break;
-            }
-            case 2:
-            {
-                // printf(" already loaded!\n");
-                return fp;
-                break;
-            }
-        }
-
-        while(!EM_ASM_INT(
-            var path = g_onsyuri_module.UTF8ToString($0);
-            var key = path.toLowerCase();
-            return g_onsyuri_filemap[key].loaded;, path))
-        {
-            SDL_Delay(5); // wait for async function
-        }
-        fp = fopen(path, mode); // reload after fetch
-    }
-    return fp;
+    if (mode[0] == 'r' && ons_lazy_pending(path)) ons_lazy_fetch(path);
+    return fopen(path, mode);
 }
 
 extern "C" void playVideoWeb(const char *path, bool click_flag, bool loop_flag)
@@ -385,6 +339,10 @@ void parseOption(int argc, char *argv[]) {
             }
             else if (!strcmp(argv[0]+1, "-enc:gbk")){
                 if(!coding2utf16) coding2utf16 = new GBK2UTF16();
+            }
+            else if (!strcmp(argv[0]+1, "-english-menu")){
+                if(!coding2utf16) coding2utf16 = new SJIS2UTF16();
+                coding2utf16->english_menu = true;
             }
             else if (!strcmp(argv[0]+1, "-enc:utf8")){
                 if(!coding2utf16) coding2utf16 = new GBK2UTF16();

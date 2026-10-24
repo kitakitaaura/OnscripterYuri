@@ -20,6 +20,7 @@
 */
 
 #include "coding2utf16.h"
+#include <string.h>
 
 
 char Coding2UTF16::space[4] = "　";
@@ -28,19 +29,39 @@ char Coding2UTF16::bracket[8] = "【】";
 char Coding2UTF16::num_str[24] = "0123456789";
 char Coding2UTF16::DEFAULT_START_KINSOKU[40] = "」』）］｝、。，．。？！ー" ;
 char Coding2UTF16::DEFAULT_END_KINSOKU[12] = "「『（";
-char Coding2UTF16::DEFAULT_SAVE_MENU_NAME[12] = "＜save＞";
-char Coding2UTF16::DEFAULT_LOAD_MENU_NAME[12] = "＜load＞";
-char Coding2UTF16::DEFAULT_SAVE_ITEM_NAME[8] = "data";
-char Coding2UTF16::MESSAGE_SAVE_EXIST[24] = "%s%s %s/%s—%s:%s";
-char Coding2UTF16::MESSAGE_SAVE_EMPTY[32] = "%s%s ————————";
-char Coding2UTF16::MESSAGE_SAVE_CONFIRM[40] = "`Save slot %s%s?";
-char Coding2UTF16::MESSAGE_LOAD_CONFIRM[40] = "`Load slot %s%s?";
-char Coding2UTF16::MESSAGE_RESET_CONFIRM[36] = "`Return Title?";
-char Coding2UTF16::MESSAGE_END_CONFIRM[32] = "`Exit Game?";
-char Coding2UTF16::MESSAGE_YES[8] = "Yes";
-char Coding2UTF16::MESSAGE_NO[8] = "No";
-char Coding2UTF16::MESSAGE_OK[8] = "OK";
-char Coding2UTF16::MESSAGE_CANCEL[12] = "Cancel";
+char Coding2UTF16::DEFAULT_SAVE_MENU_NAME[64] = "＜save＞";
+char Coding2UTF16::DEFAULT_LOAD_MENU_NAME[64] = "＜load＞";
+char Coding2UTF16::DEFAULT_SAVE_ITEM_NAME[64] = "data";
+char Coding2UTF16::MESSAGE_SAVE_EXIST[64] = "%s%s %s/%s—%s:%s";
+char Coding2UTF16::MESSAGE_SAVE_EMPTY[64] = "%s%s ————————";
+char Coding2UTF16::MESSAGE_SAVE_CONFIRM[64] = "`Save slot %s%s?";
+char Coding2UTF16::MESSAGE_LOAD_CONFIRM[64] = "`Load slot %s%s?";
+char Coding2UTF16::MESSAGE_RESET_CONFIRM[64] = "`Return Title?";
+char Coding2UTF16::MESSAGE_END_CONFIRM[64] = "`Exit Game?";
+char Coding2UTF16::MESSAGE_YES[64] = "Yes";
+char Coding2UTF16::MESSAGE_NO[64] = "No";
+char Coding2UTF16::MESSAGE_OK[64] = "OK";
+char Coding2UTF16::MESSAGE_CANCEL[64] = "Cancel";
+
+// English builds of Shift-JIS games (e.g. Mirror Moon's Tsukihime) ship
+// ONScripter-EN, whose system menus use these 1-byte strings. The Japanese
+// defaults need full-width glyphs that such games' fonts often lack.
+void Coding2UTF16::useEnglishMenu() {
+    english_menu = true;
+    strcpy(DEFAULT_SAVE_MENU_NAME, "`[ Save ]");
+    strcpy(DEFAULT_LOAD_MENU_NAME, "`[ Load ]");
+    strcpy(DEFAULT_SAVE_ITEM_NAME, "`Slot ");
+    strcpy(MESSAGE_SAVE_EXIST, "`%s%s    Date %s/%s    Time %s:%s");
+    strcpy(MESSAGE_SAVE_EMPTY, "`%s%s    ------------------------");
+    strcpy(MESSAGE_SAVE_CONFIRM, "`Save in %s%s?");
+    strcpy(MESSAGE_LOAD_CONFIRM, "`Load from %s%s?");
+    strcpy(MESSAGE_RESET_CONFIRM, "`Return to Title Menu?");
+    strcpy(MESSAGE_END_CONFIRM, "`Quit?");
+    strcpy(MESSAGE_YES, "Yes");
+    strcpy(MESSAGE_NO, "No");
+    strcpy(MESSAGE_OK, "OK");
+    strcpy(MESSAGE_CANCEL, "Cancel");
+}
 
 int Coding2UTF16::convUTF16ToUTF8(unsigned char dst[4], uint16_t src) const {
     if (src & 0xff80) {

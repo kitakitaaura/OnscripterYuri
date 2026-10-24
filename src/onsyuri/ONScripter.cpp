@@ -303,6 +303,7 @@ void ONScripter::initSDL()
     screen_rect.h = screen_height;
 
     coding2utf16->init();
+    if (coding2utf16->english_menu) coding2utf16->useEnglishMenu();
     if (!isnan(sharpness)) {
 #if defined(USE_GLES)
         float input_size[2] = {(float)screen_width, (float)screen_height};
@@ -1033,7 +1034,22 @@ void ONScripter::mouseOverCheck( int x, int y )
 }
 
 void ONScripter::warpMouse(int x, int y) {
+#if defined(WEB)
+    // A browser cannot move the pointer, and SDL's emscripten WarpMouse is a
+    // no-op, so keyboard button navigation (shiftCursorOnButton: up/down in
+    // menus) highlighted nothing. Post the motion a real warp would cause.
+    // Callers pass device coordinates; on the web, motion events arrive in
+    // screen coordinates (see SDL_MOUSEMOTION in runEventLoop), so convert.
+    SDL_Event event;
+    SDL_zero(event);
+    event.type = SDL_MOUSEMOTION;
+    event.motion.windowID = window ? SDL_GetWindowID(window) : 0;
+    event.motion.x = (x - render_view_rect.x) * screen_width / screen_device_width;
+    event.motion.y = (y - render_view_rect.y) * screen_height / screen_device_height;
+    SDL_PushEvent(&event);
+#else
     SDL_WarpMouseInWindow(NULL, x, y);
+#endif
 }
 
 void ONScripter::setFullScreen(bool fullscreen) {

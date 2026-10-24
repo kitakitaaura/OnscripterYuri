@@ -1107,6 +1107,10 @@ void ONScripter::executeLabel()
     }
 
     current_label_info = script_h.lookupLabelNext( current_label_info.name );
+    if ( current_label_info.start_address != NULL ){
+        const char *to = noberuRedirect( current_label_info.name );
+        if ( to != current_label_info.name ) current_label_info = script_h.lookupLabel( to );
+    }
     current_line = 0;
 
     if ( current_label_info.start_address != NULL ){

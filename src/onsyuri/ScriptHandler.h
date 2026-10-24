@@ -142,6 +142,8 @@ public:
 
     int  getOffset( char *pos );
     char *getAddress( int offset );
+    // noberu: the whole script as the engine reads it (debug dump).
+    const char *getScriptBuffer( int *length ){ *length = script_buffer_length; return script_buffer; };
     int  getLineByAddress( char *address );
     char *getAddressByLine( int line );
     LabelInfo getLabelByAddress( char *address );

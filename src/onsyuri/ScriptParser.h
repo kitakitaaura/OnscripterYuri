@@ -68,6 +68,10 @@ class ScriptParser
 public:
     ScriptParser();
     ~ScriptParser();
+    // noberu (debugging): "label" starts the story at *label instead of
+    // *start; "from>to" goes to *to the first time the script enters *from.
+    // vars ("%10=1,%216=1") are set at that moment.
+    static void noberuStartAt( const char *spec, const char *vars );
 
     void reset();
     int  openScript();
@@ -175,6 +179,7 @@ public:
     int addCommand();
     
 protected:
+    const char *noberuRedirect( const char *label );
     struct UserFuncLUT{
         struct UserFuncLUT *next;
         char *command;

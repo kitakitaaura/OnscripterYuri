@@ -445,7 +445,13 @@ public:
     AnimationInfo *getSpriteInfo(int no){ return &sprite_info[no]; };
     AnimationInfo *getSprite2Info(int no){ return &sprite2_info[no]; };
     Uint32 getTextureFormat() { return texture_format; };
+    // noberu: walkthrough hooks, exported to the page by onscripter_main.cpp.
+    // noberuSelect picks option `index` (0-based) of the select on screen.
+    int  noberuSelect( int index );
+    void noberuDump( const char *path );
 private:
+    int  noberu_select_options = 0;    // options of the select waiting on a pick
+    unsigned int noberu_select_shown = 0;
     int  parseLine();
     void deleteButtonLink();
     void refreshMouseOverButton();

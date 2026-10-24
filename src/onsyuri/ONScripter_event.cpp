@@ -37,6 +37,7 @@
 #define ONS_CHUNK_EVENT   (SDL_USEREVENT+4)
 #define ONS_BREAK_EVENT   (SDL_USEREVENT+5)
 #define ONS_BGMFADE_EVENT (SDL_USEREVENT+6)
+#define ONS_NOBERU_PICK_EVENT (SDL_USEREVENT+7) // noberu: a walkthrough pick (noberuSelect)
 
 // This sets up the fade event flag for use in bgm fadeout and fadein.
 #define BGM_FADEOUT 0
@@ -1334,6 +1335,13 @@ void ONScripter::runEventLoop()
 
           case ONS_TIMER_EVENT:
             timerEvent(false);
+            break;
+
+          case ONS_NOBERU_PICK_EVENT:
+            if ( noberu_select_options > 0 && event_mode & WAIT_BUTTON_MODE ){
+                current_button_state.button = event.user.code;
+                return;
+            }
             break;
 
           case ONS_MUSIC_EVENT:

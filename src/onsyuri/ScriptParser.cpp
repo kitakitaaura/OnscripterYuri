@@ -24,6 +24,7 @@
 
 #include "ScriptParser.h"
 #include "Utils.h"
+#include <strings.h>
 #ifdef USE_BUILTIN_LAYER_EFFECTS
 #include "builtin_layer.h"
 LayerInfo layer_info[MAX_LAYER_NUM];
@@ -632,8 +633,51 @@ void ScriptParser::setStr( char **dst, const char *src, int num )
     }
 }
 
+static char *noberu_from = NULL, *noberu_to = NULL, *noberu_vars = NULL;
+
+void ScriptParser::noberuStartAt( const char *spec, const char *vars )
+{
+    const char *arrow = strchr( spec, '>' );
+    if ( arrow ){
+        noberu_from = new char[ arrow - spec + 1 ];
+        memcpy( noberu_from, spec, arrow - spec );
+        noberu_from[ arrow - spec ] = '\0';
+        spec = arrow + 1;
+    }
+    else{
+        noberu_from = new char[ 6 ];
+        strcpy( noberu_from, "start" );
+    }
+    noberu_to = new char[ strlen( spec ) + 1 ];
+    strcpy( noberu_to, spec );
+    if ( vars ){
+        noberu_vars = new char[ strlen( vars ) + 1 ];
+        strcpy( noberu_vars, vars );
+    }
+}
+
+const char *ScriptParser::noberuRedirect( const char *label )
+{
+    if ( !noberu_from || !label ) return label;
+    if ( strcasecmp( *label == '*' ? label + 1 : label, noberu_from ) ) return label;
+    utils::printInfo( "noberu: *%s -> *%s\n", noberu_from, noberu_to );
+    delete[] noberu_from;
+    noberu_from = NULL;
+    for ( const char *p = noberu_vars ; p && *p ; ){
+        while ( *p == ',' || *p == ' ' || *p == '%' ) p++;
+        char *end;
+        long no = strtol( p, &end, 10 );
+        if ( end == p || *end != '=' ) break;
+        long value = strtol( end + 1, &end, 10 );
+        script_h.setNumVariable( (int)no, (int)value );
+        p = end;
+    }
+    return noberu_to;
+}
+
 void ScriptParser::setCurrentLabel( const char *label )
 {
+    label = noberuRedirect( label );
     current_label_info = script_h.lookupLabel( label );
     current_line = script_h.getLineByAddress( current_label_info.start_address );
     script_h.setCurrent( current_label_info.start_address );

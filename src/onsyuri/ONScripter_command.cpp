@@ -774,8 +774,56 @@ int ONScripter::setcursorCommand()
     return RET_CONTINUE;
 }
 
+// noberu: each select is reported to the page for its walkthrough
+// (onscripter-runtime/ons.html, Module.noberuChoice*), keyed by the label it
+// sits under and its line from that label (the label's own line is 0), and
+// its line in the whole script (pos). Option texts are the script's bytes.
+#if defined(WEB)
+#include <emscripten.h>
+static void noberuReportChoice( const char *label, int line, int pos )
+{
+    EM_ASM({ if (Module.noberuChoiceBegin) Module.noberuChoiceBegin(UTF8ToString($0), $1, $2); },
+           label, line, pos);
+}
+static void noberuReportOption( const char *text, bool shown )
+{
+    EM_ASM({ if (Module.noberuChoiceOption) Module.noberuChoiceOption(HEAPU8.slice($0, $0 + $1), !!$2); },
+           text, (int)strlen( text ), shown ? 1 : 0);
+}
+static void noberuReportEnd()
+{
+    EM_ASM({ if (Module.noberuChoiceEnd) Module.noberuChoiceEnd(); });
+}
+static void noberuReportMade( int index )
+{
+    EM_ASM({ if (Module.noberuChoiceMade) Module.noberuChoiceMade($0); }, index);
+}
+#endif
+
+int ONScripter::noberuSelect( int index )
+{
+    if ( index < 0 || index >= noberu_select_options || index >= 32 ||
+         !(noberu_select_shown & (1u << index)) ) return 0;
+    SDL_Event event;
+    event.type = SDL_USEREVENT + 7; // ONS_NOBERU_PICK_EVENT
+    event.user.code = index + 1;
+    SDL_PushEvent( &event );
+    return 1;
+}
+
+void ONScripter::noberuDump( const char *path )
+{
+    int length;
+    const char *buffer = script_h.getScriptBuffer( &length );
+    FILE *fp = ::fopen( path, "wb" ); // not ScriptParser::fopen, which is under the game folder
+    if ( !fp ) return;
+    fwrite( buffer, 1, length, fp );
+    fclose( fp );
+}
+
 int ONScripter::selectCommand()
 {
+    char *noberu_at = script_h.getCurrent();
     enterTextDisplayMode();
 
     int select_mode = SELECT_GOTO_MODE;
@@ -900,12 +948,39 @@ int ONScripter::selectCommand()
         
     refreshMouseOverButton();
 
+    noberu_select_options = 0;
+    noberu_select_shown = 0;
+#if defined(WEB)
+    {
+        ScriptHandler::LabelInfo label = script_h.getLabelByAddress( noberu_at );
+        int line = script_h.getLineByAddress( noberu_at );
+        noberuReportChoice( label.name, line, label.start_line + line );
+        for ( SelectLink *link = root_select_link.next ; link ; link = link->next ){
+            if ( noberu_select_options < 32 && *link->text )
+                noberu_select_shown |= 1u << noberu_select_options;
+            noberuReportOption( link->text, *link->text != 0 );
+            noberu_select_options++;
+        }
+        noberuReportEnd();
+    }
+#endif
+
     event_mode = WAIT_TEXT_MODE | WAIT_BUTTON_MODE | WAIT_TIMER_MODE;
     do{
         skip_mode &= ~SKIP_NORMAL;
-        if (waitEvent(-1)) return RET_CONTINUE;
+        if (waitEvent(-1)){
+            noberu_select_options = 0;
+#if defined(WEB)
+            noberuReportMade( -1 );
+#endif
+            return RET_CONTINUE;
+        }
     }
     while(current_button_state.button <= 0 || skip_mode & SKIP_NORMAL);
+    noberu_select_options = 0;
+#if defined(WEB)
+    noberuReportMade( current_button_state.button - 1 );
+#endif
         
     if ( selectvoice_file_name[SELECTVOICE_SELECT] )
         playSound(selectvoice_file_name[SELECTVOICE_SELECT], 

@@ -290,6 +290,20 @@ FILE *fopen_ons(const char *path, const char *mode)
     return fopen(path, mode);
 }
 
+// noberu's walkthrough (onscripter-runtime/ons.html): pick option `index`
+// (0-based) of the select on screen; 1 if it was taken. And a debug dump of
+// the whole script as the engine reads it (nscript.dat decoded, 0.txt...),
+// to /tmp/script.txt.
+extern "C" EMSCRIPTEN_KEEPALIVE int ons_select(int index)
+{
+    return ons.noberuSelect(index);
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void ons_dump_script()
+{
+    ons.noberuDump("/tmp/script.txt");
+}
+
 extern "C" void playVideoWeb(const char *path, bool click_flag, bool loop_flag)
 {
     EM_ASM(
@@ -339,6 +353,18 @@ void parseOption(int argc, char *argv[]) {
             }
             else if (!strcmp(argv[0]+1, "-enc:gbk")){
                 if(!coding2utf16) coding2utf16 = new GBK2UTF16();
+            }
+            else if (!strcmp(argv[0]+1, "-noberu-start")){
+                // --noberu-start <label | from>to> [--noberu-vars "%10=1,..."]
+                const char *vars = NULL;
+                if (argc > 3 && !strcmp(argv[2], "--noberu-vars")) vars = argv[3];
+                ScriptParser::noberuStartAt(argv[1], vars);
+                argc--;
+                argv++;
+                if (vars){
+                    argc -= 2;
+                    argv += 2;
+                }
             }
             else if (!strcmp(argv[0]+1, "-english-menu")){
                 if(!coding2utf16) coding2utf16 = new SJIS2UTF16();
